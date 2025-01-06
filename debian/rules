@@ -9,7 +9,7 @@ endif
 confflags = --with-loadavg_mx=1.5 \
             --with-jobdir=/var/spool/cron/atjobs \
             --with-atspool=/var/spool/cron/atspool \
-            --with-systemdsystemunitdir=/lib/systemd/system \
+            --with-systemdsystemunitdir=$(shell pkgconf --variable=systemdsystemunitdir systemd) \
             $(WITH_SELINUX) \
             SENDMAIL=/usr/sbin/sendmail
 

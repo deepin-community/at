@@ -1,10 +1,108 @@
-at (3.1.23-1.1) unstable; urgency=medium
+at (3.2.5-2.1) unstable; urgency=medium
 
   * Non-maintainer upload.
-  * Update Build-Depends to use debhelper (>= 9.20160709) instead of
-    dh-systemd. (Closes: #958611)
 
- -- Michael Biebl <biebl@debian.org>  Fri, 25 Sep 2020 13:19:04 +0200
+  [ Helmut Grohne ]
+  * Defer placement of systemd units to systemd.pc. (Closes: #1054012)
+
+ -- Chris Hofstaedtler <zeha@debian.org>  Mon, 18 Dec 2023 03:33:04 +0100
+
+at (3.2.5-2) unstable; urgency=medium
+
+  * Fix a race condition on DEP8 test?
+
+ -- Jose M Calhariz <calhariz@debian.org>  Sun, 25 Jun 2023 22:46:36 +0100
+
+at (3.2.5-1) unstable; urgency=medium
+
+  * Fix: atd forgets to run a job in the queue (Closes: #1004972), thank
+    you Vincent Lefevre for the analisys and the fix.
+
+ -- Jose M Calhariz <calhariz@debian.org>  Sat, 05 Feb 2022 10:03:59 +0000
+
+at (3.2.4-2) unstable; urgency=medium
+
+  * No errors on experimental means unstable now.
+
+ -- Jose M Calhariz <calhariz@debian.org>  Wed, 02 Feb 2022 20:47:17 +0000
+
+at (3.2.4-1) experimental; urgency=medium
+
+  * New release 3.2.3
+    * Jose M Calhariz
+      - Fix two typos on documentation
+    * Giulio Benetti
+      MR14 - Makefile: fix parallel build failure
+      MR12 - Makefile.in: use DESTDIR instead of IROOT
+      MR11 - Use quotes to include config.h since it is a local file.
+      MR8 - .gitignore: add all files produced during building
+      MR13 - getloadavg: use standard fcntl.h for open(), close(), read() and write()
+    * Danilo Spinella
+      MR16 - Fix leaks in at.c
+      MR19 - Avoid sleeping when SIGHUP has been received
+      MR17 - Set PIDDIR to /run if exists on the system
+    * Jan Staněk
+      MR15 - Address issues raised by static analysis
+
+  * New release at 3.2.4 (2022-01-29):
+    * Danillo Spinella
+      - Use POSIX timers to wait on next job
+      - Add timeformat argument in at.c
+      - Use secure_getenv when available
+      - Add O_SYNC option when opening atjob file
+      - Fix mtime check in atd.c
+        https://bugzilla.suse.com/show_bug.cgi?id=680113
+      - MR18 - Use POSIX timers to wait on next job
+        Upstreaming openSUSE patch: https://build.opensuse.org/package/view_file/Base:System/at/at-3.1.14-usePOSIXtimers.patch?expand=0&rev=d84f9fe442d5b5cce89c22d52581dfa4
+      - MR21 - Add timeformat argument in at.c
+        Upstreaming openSUSE patch: https://build.opensuse.org/package/view_file/Base:System/at/at-atq-timeformat.patch?expand=1
+      - MR23 - Use secure_getenv when available
+        https://build.opensuse.org/package/view_file/Base:System/at/at-secure_getenv.patch?expand=1
+        - MR25 - Fix mtime check in atd.c
+          https://bugzilla.suse.com/show_bug.cgi?id=680113
+        - MR22 - Print the selected jobs in atq
+          https://build.opensuse.org/package/view_file/Base:System/at/at-3.1.14-joblist.patch?expand=1
+        - MR24 - Add O_SYNC option when opening atjob file
+  [ Utkarsh Gupta ]
+  * MR26 - d/t/{control, basic-usage}: Add DEP8 test
+
+ -- Jose M Calhariz <calhariz@debian.org>  Sat, 29 Jan 2022 17:04:09 +0000
+
+at (3.2.2-1) experimental; urgency=medium
+
+  [ Jose M Calhariz ]
+  * New release 3.2.2
+    * Jose M Calhariz
+      -  Add helper script batch-job
+  * New release 3.2.1
+    * Jose M Calhariz
+      - Include config.h on parsetime.l, see
+        88a3bed41de234220f007c785e3aa45bd62446c6 for more info and
+        original author.
+      - Check if libc provides __isleap() macro, see
+        02a0a98d94b24284177dad7747edbdc3088d63cd
+  * New release 3.2.0:
+    * Jose M Calhariz
+      - Print time of new job before the input of the commands,
+        (Closes: #863045)
+      - Do not drop seconds on -t option, (Closes: #792040)
+      - Start using nice levels from 0 instead of 2. (Closes: #519716)
+      - Correctly handle DST when specifying a UTC time. (Closes: #364975)
+    * Gerhard Poul:
+      - Add flag to send email to other user. MR 5
+  * Clean patches directory.
+  * Update Build-Depends, silent lintian warning.
+  * Add public PGP of upstream aka myself.
+  * Update debian/watch.
+  * Bump Standards-Version to 4.3.0, no changes were made.
+  * Acknowledge the NMU and incorporated the changes.
+
+  [ Debian Janitor ]
+  * Trim trailing whitespace.
+  * Use secure copyright file specification URI.
+  * Wrap long lines in changelog entries: 3.1.9.
+
+ -- Jose M Calhariz <calhariz@debian.org>  Sun, 25 Apr 2021 18:36:34 +0100
 
 at (3.1.23-1) unstable; urgency=medium
 
@@ -18,7 +116,7 @@ at (3.1.23-1) unstable; urgency=medium
     - On reboot remove stale jobs (Closes: #885891).
     - Some fixes on the manual pages (Closes: #897669), (Closes: #897670).
     - Remove no longer valid email from manpages (Closes: #883730).
-    
+
   * Drop patches accepted by upstream.
 
  -- Jose M Calhariz <calhariz@debian.org>  Tue, 24 Jul 2018 10:17:21 +0100
@@ -319,11 +417,13 @@ at (3.1.9) unstable; urgency=low
   * Use invoke-rc.d in maintainer scripts (closes: #162677)
   * Allow usernames > 8 characters.  Don't write out usernames with at that
     atd will later call corrupt (closes: #17561)
-  * Run as user daemon, rather than root (from 3.1.8-11ubuntu3) (closes: #251058)
+  * Run as user daemon, rather than root (from 3.1.8-11ubuntu3) (closes:
+    #251058)
     + Derooted /usr/bin/at.
     + at.c:
       - Keep real uid, only switch to daemon gid when unlinking files (the
-        directory is daemon-group writeable, but the job files are owned by user).
+        directory is daemon-group writeable, but the job files are owned by
+        user).
       - Instead of creating the job file and then fchown()'ing it (which does
         not work when running as non-root), change to the real gid when
         creating the file.
@@ -402,7 +502,7 @@ at (3.1.8-10) frozen unstable; urgency=high
   * Changed AC_FUNC_GETLOADAVG to AC_REPLACE_FUNCS(getloadavg) in
     configure.in since it introduces a spurious depencency on libelfg0
     whenever that package is installed on the build machine.
-    (closes: Bug#61295). 
+    (closes: Bug#61295).
   * configure.in: rewrote directory tests such that configure fails due to
     a missing SPOOLDIR only when --with-jobdir or --with-atspool doesn't
     specify an explicit path.
@@ -537,7 +637,7 @@ at (3.1.8-1) stable; urgency=low
   * Fix date parsing bug with February
   * Misc. manpage changes
  -- Thomas Koenig <ig25@rz.uni-karlsruhe.de>  Sun, 28 Sep 1997 21:33:44 +0200
-   
+
 at (3.1.7-6) unstable; urgency=high
   * ../at_3.1.7-4_i386.deb
   *
@@ -562,7 +662,7 @@ at (3.1.7-4) unstable; urgency=high
 
 at (3.1.7-3) stable; urgency=low
   * ../at_3.1.7-3_i386.deb
-  * 
+  *
   * libc5 version
   * removed spurious dependendy on libelf0
  -- Thomas Koenig <ig25@rz.uni-karlsruhe.de>  Tue, 17 Jun 1997 18:01:33 +0200
@@ -585,7 +685,7 @@ at (3.1.6-1) unstable frozen; urgency=medium
 
 at (3.1.5-2) unstable frozen; urgency=high
 
-  * 
+  *
   * ../at_3.1.5-2_i386.deb
   * Also check for /etc/suid.conf when calling suidregister
  -- Thomas Koenig <ig25@rz.uni-karlsruhe.de>  Wed, 7 May 1997 11:14:49 +0200

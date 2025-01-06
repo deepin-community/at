@@ -1,11 +1,11 @@
 dnl Process this file with autoconf to produce a configure script.
 
-AC_INIT(at, 3.1.23)
+AC_INIT([at],[3.2.5])
 AC_CONFIG_SRCDIR(at.c)
 
 AC_PREFIX_DEFAULT(/usr)
 AC_CONFIG_HEADER(config.h)
-AC_PREREQ([2.64])
+AC_PREREQ([2.69])
 
 VERSION=AC_PACKAGE_VERSION
 if test "X$CFLAGS" = "X"; then
@@ -17,8 +17,8 @@ AC_SUBST(VERSION)
 AC_CANONICAL_HOST
 
 dnl Checks for programs.
-
-AC_PROG_CC
+AC_USE_SYSTEM_EXTENSIONS
+AC_PROG_CC_STDC
 AC_PROG_INSTALL
 AC_PROG_LN_S
 AC_PROG_YACC
@@ -40,12 +40,10 @@ case "$host" in
 esac
 
 AC_MSG_CHECKING(__attribute__((noreturn)))
-AC_TRY_COMPILE([], [void __attribute__((noreturn)) panic(void);],
-    AC_MSG_RESULT(yes)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[void __attribute__((noreturn)) panic(void);]])],[AC_MSG_RESULT(yes)
     AC_DEFINE(HAVE_ATTRIBUTE_NORETURN, 1,
-              [Define to 1 if compiler supports __attribute__((noreturn))]),
-    AC_MSG_RESULT(no)
-)
+              Define to 1 if compiler supports __attribute__((noreturn)))],[AC_MSG_RESULT(no)
+])
 dnl Checks for libraries.
 
 AC_CHECK_LIB(fl,yywrap,
@@ -54,6 +52,7 @@ AC_CHECK_LIB(fl,yywrap,
                   [Define to 1 if we need to provide our own yywrap()])
 )
 
+AC_CHECK_FUNCS([__secure_getenv secure_getenv])
 dnl Checks for header files.
 AC_HEADER_DIRENT
 AC_HEADER_STDC
@@ -63,7 +62,18 @@ AC_CHECK_HEADERS(stdarg.h)
 
 dnl Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
-AC_TYPE_SIGNAL
+AC_DIAGNOSE([obsolete],[your code may safely assume C89 semantics that RETSIGTYPE is void.
+Remove this warning and the `AC_CACHE_CHECK' when you adjust the code.])dnl
+AC_CACHE_CHECK([return type of signal handlers],[ac_cv_type_signal],[AC_COMPILE_IFELSE(
+[AC_LANG_PROGRAM([#include <sys/types.h>
+#include <signal.h>
+],
+		 [return *(signal (0, 0)) (0) == 1;])],
+		   [ac_cv_type_signal=int],
+		   [ac_cv_type_signal=void])])
+AC_DEFINE_UNQUOTED([RETSIGTYPE],[$ac_cv_type_signal],[Define as the return type of signal handlers
+		    (`int' or `void').])
+
 AC_TYPE_UID_T
 AC_TYPE_MODE_T
 AC_TYPE_OFF_T
@@ -71,6 +81,15 @@ AC_TYPE_PID_T
 AC_TYPE_SIZE_T
 AC_STRUCT_TM
 
+dnl Checks for macros.
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+#include <time.h>
+#ifndef __isleap
+# error __isleap macro not defined
+#endif
+]])], [
+  AC_DEFINE(HAVE_ISLEAP, 1, [Define to 1 if libc provides __isleap macro])
+], [])
 
 dnl Checks for library functions.
 AC_FUNC_VPRINTF
@@ -121,7 +140,9 @@ AC_ARG_WITH(systemdsystemunitdir,
 AC_SUBST(systemdsystemunitdir, [$with_systemdsystemunitdir])
 
 AC_MSG_CHECKING(location of pid file)
-if test -d /var/run ; then
+if test -d /run ; then
+    PIDDIR=/run
+elif test -d /var/run ; then
     PIDDIR=/var/run
 elif test -d /usr/run ; then
     PIDDIR=/usr/run
@@ -257,6 +278,12 @@ if test "x$with_selinux" != xno; then
 fi
 AC_SUBST(SELINUXLIB)
 AC_SUBST(WITH_SELINUX)
+
+dnl check for POSIX timer functions
+AC_SEARCH_LIBS([timer_create],[rt])
+AC_CHECK_FUNCS([timer_create])
+AC_SEARCH_LIBS([clock_gettime],[rt])
+AC_CHECK_FUNCS([clock_gettime])
 
 AC_MSG_CHECKING(groupname to run under)
 AC_ARG_WITH(daemon_groupname,
