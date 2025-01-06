@@ -199,3 +199,65 @@ at 3.1.22 (2018-07-24):
 at 3.1.23 (2018-07-24):
   Jose M Calhariz
 	Finalised script to release software.
+
+at 3.2.0 (2019-07-24):
+  Jose M Calhariz
+	Print time of new job before the input of the commands, Closes #863045
+	Do not drop seconds on -t option, Closes #792040
+	Start using nice levels from 0 instead of 2. Closes #519716
+        Correctly handle DST when specifying a UTC time. Closes #364975
+  Gerhard Poul:
+	Add flag to send email to other user. MR 5
+
+at 3.2.1 (2019-08-04):
+    Jose M Calhariz
+	Include config.h on parsetime.l, see
+	88a3bed41de234220f007c785e3aa45bd62446c6 for more info and
+	original author.
+	Check if libc provides __isleap() macro, see
+	02a0a98d94b24284177dad7747edbdc3088d63cd
+
+at 3.2.2 (2021-04-25):
+  Jose M Calhariz
+	Add helper script batch-job
+
+at 3.2.3 (2022-01-29):
+  Jose M Calhariz
+	Fix two typos on documentation
+  Giulio Benetti
+	MR14 - Makefile: fix parallel build failure
+	MR12 - Makefile.in: use DESTDIR instead of IROOT
+	MR11 - Use quotes to include config.h since it is a local file.
+	MR8 - .gitignore: add all files produced during building
+	MR13 - getloadavg: use standard fcntl.h for open(), close(), read() and write()
+  Danilo Spinella
+	MR16 - Fix leaks in at.c
+	MR19 - Avoid sleeping when SIGHUP has been received
+	MR17 - Set PIDDIR to /run if exists on the system
+  Jan Staněk
+	MR15 - Address issues raised by static analysis
+
+at 3.2.4 (2022-01-29):
+  Danillo Spinella
+	Use POSIX timers to wait on next job
+	Add timeformat argument in at.c
+	Use secure_getenv when available
+	Add O_SYNC option when opening atjob file
+	Fix mtime check in atd.c
+	  https://bugzilla.suse.com/show_bug.cgi?id=680113
+	MR18 - Use POSIX timers to wait on next job
+	  Upstreaming openSUSE patch: https://build.opensuse.org/package/view_file/Base:System/at/at-3.1.14-usePOSIXtimers.patch?expand=0&rev=d84f9fe442d5b5cce89c22d52581dfa4
+	MR21 - Add timeformat argument in at.c
+	  Upstreaming openSUSE patch: https://build.opensuse.org/package/view_file/Base:System/at/at-atq-timeformat.patch?expand=1
+	MR23 - Use secure_getenv when available
+	  https://build.opensuse.org/package/view_file/Base:System/at/at-secure_getenv.patch?expand=1
+	MR25 - Fix mtime check in atd.c
+	  https://bugzilla.suse.com/show_bug.cgi?id=680113
+	MR22 - Print the selected jobs in atq
+	  https://build.opensuse.org/package/view_file/Base:System/at/at-3.1.14-joblist.patch?expand=1
+	MR24 - Add O_SYNC option when opening atjob file
+
+at 3.2.5 (2022-02-05)
+  Vincent Lefevre
+	Fix: atd forgets to run a job in the queue
+	  https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1004972

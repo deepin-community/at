@@ -92,10 +92,11 @@ usage(void)
 {
 /* Print usage and exit.
  */
-    fprintf(stderr, "Usage: at [-V] [-q x] [-f file] [-mMlbv] timespec ...\n"
-            "       at [-V] [-q x] [-f file] [-mMlbv] -t time\n"
+    fprintf(stderr, "Usage: at [-V] [-q x] [-f file] [-u username] [-mMlbv] timespec ...\n"
+            "       at [-V] [-q x] [-f file] [-u username] [-mMlbv] -t time\n"
     	    "       at -c job ...\n"
-	    "       atq [-V] [-q x]\n"
+	    "       at [-V] -l [-o timeformat] [job ...]\n"
+	    "       atq [-V] [-q x] [-o timeformat] [job ...]\n"
 	    "       at [ -rd ] job ...\n"
 	    "       atrm [-V] job ...\n"
 	    "       batch\n");

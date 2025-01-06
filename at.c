@@ -97,6 +97,12 @@
 #define DEFAULT_QUEUE 'a'
 #define BATCH_QUEUE   'b'
 
+#ifndef HAVE_SECURE_GETENV
+#  ifdef HAVE___SECURE_GETENV
+#    define secure_getenv __secure_getenv
+#  endif
+#endif
+
 enum {
     ATQ, BATCH, ATRM, AT, CAT
 };				/* what program we want to run */
@@ -127,6 +133,8 @@ char atfile[] = ATJOB_DIR "/12345678901234";
 char *atinput = (char *) 0;	/* where to get input from */
 char atqueue = 0;		/* which queue to examine for jobs (atq) */
 char atverify = 0;		/* verify time instead of queuing job */
+char *mail_rcpt = (char *) 0;   /* user to send mail to */
+char *timeformat = TIMEFORMAT_POSIX;	/* time format (atq) */
 
 /* Function declarations */
 
@@ -134,7 +142,10 @@ static void sigc(int signo);
 static void alarmc(int signo);
 static char *cwdname(void);
 static void writefile(time_t runtimer, char queue);
-static void list_jobs(void);
+static void list_jobs(long *, int);
+static int in_job_list(long, long *, int);
+static long *get_job_list(int, char *[], int *);
+static char *at_getenv(char* env);
 
 /* Signal catching functions */
 
@@ -316,7 +327,7 @@ writefile(time_t runtimer, char queue)
 	 */
 	cmask = umask(S_IRUSR | S_IWUSR | S_IXUSR);
         seteuid(real_uid);
-	if ((fd = open(atfile, O_CREAT | O_EXCL | O_TRUNC | O_WRONLY, S_IRUSR)) == -1)
+	if ((fd = open(atfile, O_CREAT | O_EXCL | O_TRUNC | O_WRONLY | O_SYNC, S_IRUSR)) == -1)
 	    perr("Cannot create atjob file %.500s", atfile);
         seteuid(effective_uid);
 
@@ -352,22 +363,36 @@ writefile(time_t runtimer, char queue)
     if ((fp = fdopen(fd, "w")) == NULL)
 	panic("Cannot reopen atjob file");
 
-    /* Get the userid to mail to, first by trying getlogin(), which reads
-     * /var/run/utmp, then from LOGNAME, finally from getpwuid().
-     */
-    mailname = getlogin();
-    if (mailname == NULL)
-	mailname = getenv("LOGNAME");
-    if (mailname == NULL || mailname[0] == '\0' || getpwnam(mailname) == NULL) {
-	pass_entry = getpwuid(real_uid);
-	if (pass_entry != NULL)
-	    mailname = pass_entry->pw_name;
+    if (mail_rcpt != NULL)
+        /* If the userid to mail to has been set on the command-line, then
+         * validate the user and continue
+         */
+        if (getpwnam(mail_rcpt) != NULL)
+            mailname = mail_rcpt;
+        else {
+            char msg[80];
+            snprintf(msg, sizeof(msg), "Cannot find username %s", mail_rcpt);
+            panic(msg);
+        }
+    else {
+        /* Get the userid to mail to, first by trying getlogin(), which reads
+         * /var/run/utmp, then from LOGNAME, finally from getpwuid().
+         */
+        mailname = getlogin();
+        if (mailname == NULL)
+            mailname = at_getenv("LOGNAME");
+        if (mailname == NULL || mailname[0] == '\0' || getpwnam(mailname) == NULL) {
+            pass_entry = getpwuid(real_uid);
+            if (pass_entry != NULL)
+	        mailname = pass_entry->pw_name;
+        }
     }
 
     if ((mailname == NULL) || (mailname[0] == '\0')
 	|| (strlen(mailname) > mailsize) ) {
 	panic("Cannot find username to mail output to");
     }
+
     if (atinput != (char *) NULL) {
 	fpin = freopen(atinput, "r", stdin);
 	if (fpin == NULL)
@@ -479,6 +504,11 @@ writefile(time_t runtimer, char queue)
 
     istty = isatty(fileno(stdin));
     if (istty) {
+	runtime = localtime(&runtimer);
+
+	strftime(timestr, TIMESIZE, TIMEFORMAT_POSIX, runtime);
+	fprintf(stderr, "at %s\n", timestr);
+
 	fprintf(stderr, "at> ");
 	fflush(stderr);
     }
@@ -512,9 +542,10 @@ writefile(time_t runtimer, char queue)
 
     close(fd2);
 
+    /* This line maybe superfluous after commit 11cb731bb560eb7bff4889c5528d5f776606b0d3 */
     runtime = localtime(&runtimer);
 
-    strftime(timestr, TIMESIZE, TIMEFORMAT_POSIX, runtime);
+    strftime(timestr, TIMESIZE, timeformat, runtime);
     fprintf(stderr, "job %ld at %s\n", jobno, timestr);
 
     /* Signal atd, if present. Usual precautions taken... */
@@ -524,17 +555,27 @@ writefile(time_t runtimer, char queue)
 	return;
     }
 
-    if (fstat(fd, &statbuf) == -1)
+    if (fstat(fd, &statbuf) == -1) {
+	close(fd);
 	return;
+    }
     if ((statbuf.st_uid != 0) || !S_ISREG(statbuf.st_mode) ||
-	(statbuf.st_mode & (S_IWGRP | S_IWOTH)))
+	(statbuf.st_mode & (S_IWGRP | S_IWOTH))) {
+	close(fd);
 	return;
+    }
 
     fp = fdopen(fd, "r");
-    if (fp == NULL)
+    if (fp == NULL) {
+	close(fd);
 	return;
-    if (fscanf(fp, "%d", &pid) != 1)
+    }
+    if (fscanf(fp, "%d", &pid) != 1) {
+	fclose(fp);
 	return;
+    } else {
+	fclose(fp);
+    }
 
     kill_errno = 0;
 
@@ -566,8 +607,20 @@ writefile(time_t runtimer, char queue)
     return;
 }
 
+static int
+in_job_list(long job, long *joblist, int len)
+{
+    int i;
+
+    for (i = 0; i < len; i++)
+        if (job == joblist[i])
+            return 1;
+
+    return 0;
+}
+
 static void
-list_jobs(void)
+list_jobs(long *joblist, int len)
 {
     /* List all a user's jobs in the queue, by looping through ATJOB_DIR, 
      * or everybody's if we are root
@@ -606,19 +659,26 @@ list_jobs(void)
 	if (sscanf(dirent->d_name, "%c%5lx%8lx", &queue, &jobno, &ctm) != 3)
 	    continue;
 
+	/* If jobs are given, only list those jobs */
+	if (joblist && !in_job_list(jobno, joblist, len))
+	    continue;
+
 	if (atqueue && (queue != atqueue))
 	    continue;
 
 	runtimer = 60 * (time_t) ctm;
 	runtime = localtime(&runtimer);
 
-	strftime(timestr, TIMESIZE, TIMEFORMAT_POSIX, runtime);
+	strftime(timestr, TIMESIZE, timeformat, runtime);
 
 	if ((pwd = getpwuid(buf.st_uid)))
 	  printf("%ld\t%s %c %s\n", jobno, timestr, queue, pwd->pw_name);
 	else
 	  printf("%ld\t%s %c\n", jobno, timestr, queue);
     }
+
+    closedir(spool);
+
     PRIV_END
 }
 
@@ -701,6 +761,8 @@ process_jobs(int argc, char **argv, int what)
 				putchar(ch);
 			    }
 			    done = 1;
+			    fclose(fp);
+			    fp = NULL;
 			}
 			else {
 			    perr("Cannot open %.500s", dirent->d_name);
@@ -727,6 +789,29 @@ process_jobs(int argc, char **argv, int what)
     return rc;
 }				/* delete_jobs */
 
+static long *
+get_job_list(int argc, char *argv[], int *joblen)
+{
+    int i, len;
+    long *joblist;
+    char *ep;
+
+    joblist = NULL;
+    len = argc;
+    if (len > 0) {
+	joblist = (long *) mymalloc(len * sizeof(*joblist));
+	for (i = 0; i < argc; i++) {
+	    errno = 0;
+	    if ((joblist[i] = strtol(argv[i], &ep, 10)) < 0 ||
+		ep == argv[i] || *ep != '\0' || errno)
+		panic("invalid job number");
+        }
+    }
+
+    *joblen = len;
+    return joblist;
+}
+
 /* Global functions */
 
 void *
@@ -749,9 +834,11 @@ main(int argc, char **argv)
     char *pgm;
 
     int program = AT;		/* our default program */
-    char *options = "q:f:MmbvlrdhVct:";	/* default options for at */
+    char *options = "q:f:Mmu:bvlrdhVct:";	/* default options for at */
     int disp_version = 0;
     time_t timer = 0;
+    long *joblist = NULL;
+    int joblen = 0;
     struct passwd *pwe;
     struct group *ge;
 
@@ -780,7 +867,7 @@ main(int argc, char **argv)
      */
     if (strcmp(pgm, "atq") == 0) {
 	program = ATQ;
-	options = "hq:V";
+	options = "hq:Vo:";
     } else if (strcmp(pgm, "atrm") == 0) {
 	program = ATRM;
 	options = "hV";
@@ -804,6 +891,10 @@ main(int argc, char **argv)
 
 	case 'M':		/* don't send mail, even when job failed */
 	    send_mail = -1;
+	    break;
+
+	case 'u':               /* send mail to specific user */
+	    mail_rcpt = optarg;
 	    break;
 
 	case 'f':
@@ -860,9 +951,11 @@ main(int argc, char **argv)
 		fprintf(stderr, "invalid date format: %s\n", optarg);
 		exit(EXIT_FAILURE);
 	    }
-	    /* drop seconds */
-	    timer -= timer % 60;
 	    break;
+
+	case 'o':
+	    timeformat = optarg;
+            break;
 
 	default:
 	    usage();
@@ -889,8 +982,9 @@ main(int argc, char **argv)
     case ATQ:
 
 	REDUCE_PRIV(daemon_uid, daemon_gid)
-
-	    list_jobs();
+	    if (queue_set == 0)
+		joblist = get_job_list(argc - optind, argv + optind, &joblen);
+	    list_jobs(joblist, joblen);
 	break;
 
     case ATRM:
@@ -979,4 +1073,15 @@ main(int argc, char **argv)
     }
     exit(EXIT_SUCCESS);
 }
+
+#if defined (HAVE_SECURE_GETENV) || defined(HAVE___SECURE_GETENV)
+static
+char *at_getenv(char* env) {
+    return secure_getenv(env);
+}
+#else
+char *at_getenv(char* env) {
+    return getenv(env);
+}
+#endif
 

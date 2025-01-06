@@ -108,9 +108,10 @@ static char *namep;
 static double load_avg = LOADAVG_MX;
 static time_t now;
 static time_t last_chg;
-static int nothing_to_do;
+static int nothing_to_do = 0;
 unsigned int batch_interval;
 static int run_as_daemon = 0;
+static int hupped = 0;
 
 static volatile sig_atomic_t term_signal = 0;
 
@@ -141,10 +142,10 @@ set_term(int dummy)
     return;
 }
 
-RETSIGTYPE 
-sdummy(int dummy)
+RETSIGTYPE
+set_hup(int dummy)
 {
-    /* Empty signal handler */
+    hupped = 1;
     nothing_to_do = 0;
     return;
 }
@@ -494,7 +495,7 @@ run_file(const char *filename, uid_t uid, gid_t gid)
 
 	PRIV_START
 
-	    nice((tolower((int) queue) - 'a' + 1) * 2);
+	    nice((tolower((int) queue) - 'a') * 2);
 
 #ifdef WITH_SELINUX
 	    if (selinux_enabled > 0) {
@@ -635,10 +636,11 @@ run_loop()
     if (stat(".", &buf) == -1)
 	perr("Cannot stat " ATJOB_DIR);
 
-    if (nothing_to_do && buf.st_mtime <= last_chg)
+    if (nothing_to_do && buf.st_mtime == last_chg)
 	return next_job;
     last_chg = buf.st_mtime;
 
+    hupped = 0;
     if ((spool = opendir(".")) == NULL)
 	perr("Cannot read " ATJOB_DIR);
 
@@ -674,10 +676,10 @@ run_loop()
 	/* Skip lock files */
 	if (queue == '=') {
             /* FIXME: calhariz */
-            /* I think the following code is broken, but commenting
-               may haven unknow side effects.  Make a release and see
+            /* I think the following code is broken, but commenting it
+               may cause unknow side effects.  Make a release and see
                in the wild how it works. For more information see:
-               https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=818508/*
+               https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=818508 */
 
 	    /* if ((buf.st_nlink == 1) && (run_time + CHECK_INTERVAL <= now)) { */
 	    /*     /\* Remove stale lockfile FIXME: lock the lockfile, if you fail, it's still in use. *\/ */
@@ -771,6 +773,54 @@ run_loop()
     return next_job;
 }
 
+#ifdef HAVE_CLOCK_GETTIME
+timer_t timer;
+struct itimerspec timeout;
+
+void timer_setup()
+{
+    struct sigevent sev;
+
+    sev.sigev_notify = SIGEV_SIGNAL;
+    sev.sigev_signo = SIGHUP;
+    sev.sigev_value.sival_ptr = &timer;
+
+    memset(&timeout, 0, sizeof(timeout));
+
+    if (timer_create(CLOCK_REALTIME, &sev, &timer) < 0)
+           pabort("unable to create timer");
+}
+
+time_t atd_gettime()
+{
+    struct timespec curtime;
+
+    clock_gettime(CLOCK_REALTIME, &curtime);
+
+    return curtime.tv_sec;
+}
+
+void atd_setalarm(time_t next)
+{
+    timeout.it_value.tv_sec = next;
+    timer_settime(timer, TIMER_ABSTIME, &timeout, NULL);
+    sleep(next - now);
+}
+#else
+void timer_setup()
+{
+}
+
+time_t atd_gettime()
+{
+    return time(NULL);
+}
+
+void atd_setalarm(time_t next)
+{
+    sleep(next - now);
+}
+#endif
 /* Global functions */
 
 int
@@ -876,7 +926,7 @@ main(int argc, char *argv[])
     sigaction(SIGCHLD, &act, NULL);
 
     if (!run_as_daemon) {
-	now = time(NULL);
+	now = atd_gettime();
 	run_loop();
 	exit(EXIT_SUCCESS);
     }
@@ -888,7 +938,7 @@ main(int argc, char *argv[])
      */
 
     sigaction(SIGHUP, NULL, &act);
-    act.sa_handler = sdummy;
+    act.sa_handler = set_hup;
     sigaction(SIGHUP, &act, NULL);
 
     sigaction(SIGTERM, NULL, &act);
@@ -899,14 +949,16 @@ main(int argc, char *argv[])
     act.sa_handler = set_term;
     sigaction(SIGINT, &act, NULL);
 
+    timer_setup();
     daemon_setup();
 
     do {
-	now = time(NULL);
+	now = atd_gettime();
 	next_invocation = run_loop();
-	if (next_invocation > now) {
-	    sleep(next_invocation - now);
+	if ((next_invocation > now) && (!hupped)) {
+    	    atd_setalarm(next_invocation);
 	}
+	hupped = 0;
     } while (!term_signal);
     daemon_cleanup();
     exit(EXIT_SUCCESS);
